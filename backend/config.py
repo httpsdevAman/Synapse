@@ -1,0 +1,17 @@
+from pydantic_settings import BaseSettings
+from pathlib import Path
+
+class Settings(BaseSettings):
+    REPOS_DIR: str = "./repositories"
+    VECTOR_STORE_DIR: str = "./vector_store"
+    EMBEDDING_MODEL: str = "all-MiniLML6-v2"
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+
+    class Config:
+        env_file = ".env"
+        case_sensitive = True
+
+settings = Settings()
+
+Path(settings.REPOS_DIR).mkdir(parents=True, exist_ok=True)
+Path(settings.VECTOR_STORE_DIR).mkdir(parents=True, exist_ok=True)

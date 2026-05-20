@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic-settings
+python-dotenv
+gitpython 
+tree-sitter==0.20.1
+sentence-transformers
+torch
+faiss-cpu
+numpy
