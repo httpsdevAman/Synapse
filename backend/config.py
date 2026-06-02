@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     VECTOR_STORE_DIR: str = "./vector_store"
     EMBEDDING_MODEL: str = "all-MiniLML6-v2"
     OLLAMA_BASE_URL: str = "http://localhost:11434"
+    GROQ_API_KEY: str
+    GROQ_MODEL: str ="llama3-70b-8192"
 
     class Config:
         env_file = ".env"

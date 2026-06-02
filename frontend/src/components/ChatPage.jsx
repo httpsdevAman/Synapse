@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Logo from "../widgets/Logo";
+import { chatRepository, fetchRepositories, fetchRepositoryById, searchRepository } from "../api/repo.api.js";
 
 const S = {
   page: { display: "flex", height: "100vh", background: "var(--bg-primary)", color: "var(--text-primary)", fontFamily: "'Inter',sans-serif", overflow: "hidden" },
@@ -21,16 +22,6 @@ const S = {
   card: { background: "linear-gradient(135deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))", border: "1px solid var(--border-primary)", borderRadius: 16, padding: 16 },
 };
 
-const MOCK_REPOS = [
-  { id: "facebook-react", name: "facebook/react" },
-  { id: "vercel-next.js", name: "vercel/next.js" },
-  { id: "tailwindlabs-tailwindcss", name: "tailwindlabs/tailwindcss" },
-];
-
-const MOCK_CHUNKS = [
-  { filePath: "src/components/Navbar.jsx", score: 0.942, type: "Component", code: `export default function Navbar() {\n  const [scrolled, setScrolled] = useState(false);\n  useEffect(() => {\n    const onScroll = () => setScrolled(window.scrollY > 20);\n    window.addEventListener("scroll", onScroll);\n    return () => window.removeEventListener("scroll", onScroll);\n  }, []);\n  return <nav className="navbar">...</nav>;\n}` },
-  { filePath: "src/App.jsx", score: 0.887, type: "Routing", code: `function App() {\n  return (\n    <>\n      <Navbar />\n      <Routes>\n        <Route path="/" element={<HomePage />} />\n        <Route path="/dashboard" element={<DashboardPage />} />\n        <Route path="/chat/:repoId" element={<ChatPage />} />\n      </Routes>\n    </>\n  );\n}` },
-];
 
 function IconBtn({ icon, active, onClick, title }) {
   return (
@@ -196,13 +187,59 @@ export default function ChatPage() {
   const [mode, setMode] = useState("chat");
   const [rightOpen, setRightOpen] = useState(typeof window !== "undefined" ? window.innerWidth >= 1024 : true);
   const [query, setQuery] = useState("");
-  const [messages, setMessages] = useState([{ sender: "ai", text: `Hello! I've indexed \`${repoId}\`. Ask me anything about the repo's structure, dependencies, or specific functions.`, sources: [] }]);
+  const [messages, setMessages] = useState([]);
   const [typing, setTyping] = useState(false);
   const [accordionOpen, setAccordionOpen] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [expandedResult, setExpandedResult] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [repos, setRepos] = useState([]);
+  const [activeRepo, setActiveRepo] = useState(null);
   const endRef = useRef(null);
+
+  // Fetch all repositories to populate sidebar
+  useEffect(() => {
+    const loadRepos = async () => {
+      try {
+        const data = await fetchRepositories();
+        setRepos(data.map(repo => ({
+          id: repo.repo_id,
+          name: repo.repo_name,
+          files: repo.total_files,
+          chunks: repo.total_chunks,
+        })));
+      } catch (error) {
+        console.error("Failed to load repositories:", error);
+      }
+    };
+    loadRepos();
+  }, []);
+
+  // Redirect if repoId is invalid
+  useEffect(() => {
+    if (!repoId || repoId === "null" || repoId === "undefined") {
+      navigate("/dashboard");
+    }
+  }, [repoId, navigate]);
+
+  // Fetch active repository details
+  useEffect(() => {
+    if (!repoId || repoId === "null" || repoId === "undefined") return;
+    const loadActiveRepo = async () => {
+      try {
+        const data = await fetchRepositoryById(repoId);
+        setActiveRepo(data);
+        setMessages([{
+          sender: "ai",
+          text: `Hello! I've indexed \`${data.repo_name}\`. Ask me anything about the repository's structure, functions, or implementation details!`,
+          sources: []
+        }]);
+      } catch (error) {
+        console.error("Failed to load active repository:", error);
+      }
+    };
+    loadActiveRepo();
+  }, [repoId]);
 
   useEffect(() => {
     if (!window.visualViewport) return;
@@ -231,35 +268,80 @@ export default function ChatPage() {
     }
   }, [messages, typing]);
 
-  const sendChat = (e) => {
+  const sendChat = async (e) => {
     e.preventDefault();
-    if (!query.trim()) return;
-    setMessages(prev => [...prev, { sender: "user", text: query }]);
+    const userQuery = query.trim();
+    if (!userQuery || !repoId) return;
+
+    setMessages(prev => [...prev, { sender: "user", text: userQuery }]);
     setQuery("");
     setTyping(true);
-    setTimeout(() => {
+
+    try {
+      console.log("response genertated")
+      const searchRes = await chatRepository(repoId, userQuery);
+
+      const sources = searchRes.results.map(r => ({
+        filePath: r.chunk.file_path,
+        score: r.score,
+        type: r.chunk.chunk_type || "Code block",
+        code: r.chunk.content
+      }));
+
+      // Update searchResults so context metrics on the right side also reflect the chat's findings!
+      setSearchResults(sources);
+
+      let replyText = "";
+      if (sources.length > 0) {
+        const topResult = sources[0];
+        replyText = searchRes.content;
+      } else {
+        replyText = `I searched the indexed repository but couldn't find any code blocks matching your query. Could you please rephrase or mention a different component?`;
+      }
+
       setTyping(false);
       setMessages(prev => [...prev, {
         sender: "ai",
-        text: `Based on the indexed codebase, here's what I found:\n\nThe scroll behavior is managed via a \`useEffect\` hook:\n\`\`\`javascript\nuseEffect(() => {\n  const onScroll = () => setScrolled(window.scrollY > 20);\n  window.addEventListener("scroll", onScroll);\n  return () => window.removeEventListener("scroll", onScroll);\n}, []);\n\`\`\`\n\nThis pattern is clean and idiomatic React.`,
-        sources: MOCK_CHUNKS,
+        text: replyText,
+        sources: sources,
       }]);
-    }, 1600);
+    } catch (error) {
+      console.error(error);
+      setTyping(false);
+      setMessages(prev => [...prev, {
+        sender: "ai",
+        text: `Sorry, I encountered an error while searching the repository: ${error.message || error}`,
+        sources: []
+      }]);
+    }
   };
 
-  const runSearch = (e) => {
+  const runSearch = async (e) => {
     e.preventDefault();
-    if (!query.trim()) return;
-    setSearchResults(MOCK_CHUNKS);
-    setQuery("");
+    const searchQuery = query.trim();
+    if (!searchQuery || !repoId) return;
+
+    try {
+      const searchRes = await searchRepository(repoId, searchQuery);
+      const sources = searchRes.results.map(r => ({
+        filePath: r.chunk.file_path,
+        score: r.score,
+        type: r.chunk.chunk_type || "Code block",
+        code: r.chunk.content
+      }));
+      setSearchResults(sources);
+      setQuery("");
+    } catch (error) {
+      console.error(error);
+    }
   };
 
-  const repoDisplay = repoId ? repoId.replace(/-([^-]+)$/, "/$1") : "Repository";
+  const repoDisplay = activeRepo ? activeRepo.repo_name : "Repository";
 
   return (
     <div className="chat-layout" style={S.page}>
       {/* ── MOBILE TOPBAR ── */}
-      <div className="mobile-topbar" style={{ display: "none", padding: "12px 12x`x`px", borderBottom: "1px solid var(--border-primary)", alignItems: "center", justifyContent: "space-between" ,gap: 16, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(20px)", zIndex: 40 }}>
+      <div className="mobile-topbar" style={{ display: "none", padding: "12px 16px", borderBottom: "1px solid var(--border-primary)", alignItems: "center", justifyContent: "space-between" ,gap: 16, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(20px)", zIndex: 40 }}>
         <div className="flex items-center gap-3">
           <button onClick={() => setMobileMenuOpen(true)} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 24, cursor: "pointer", display: "flex" }}>
             <i className="ti ti-menu-2" />
@@ -323,7 +405,7 @@ export default function ChatPage() {
 
           <div className="chat-sidebar-body" style={S.sidebarBody}>
             <div style={S.sectionLabel}>Indexed Repositories</div>
-            {MOCK_REPOS.map(repo => (
+            {repos.map(repo => (
               <RepoBtn key={repo.id} repo={repo} active={repoId === repo.id} onClick={() => navigate(`/chat/${repo.id}`)} />
             ))}
           </div>
@@ -498,7 +580,12 @@ export default function ChatPage() {
           {/* Index metrics */}
           <div style={S.card}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: "var(--text-secondary)", textTransform: "uppercase", marginBottom: 14 }}>Index Metrics</div>
-            {[["Total AST Nodes", "14,230", "var(--text-primary)"], ["Indexed Chunks", "1,248", "var(--text-primary)"], ["Model", "all-MiniLM-L6-v2", "#818cf8"], ["Dimensions", "384", "#22d3ee"]].map(([k, v, c]) => (
+            {[
+              ["Total Files", activeRepo ? activeRepo.total_files : "N/A", "var(--text-primary)"],
+              ["Indexed Chunks", activeRepo ? activeRepo.total_chunks : "N/A", "var(--text-primary)"],
+              ["Model", "all-MiniLM-L6-v2", "#818cf8"],
+              ["Dimensions", "384", "#22d3ee"]
+            ].map(([k, v, c]) => (
               <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, paddingBottom: 10, borderBottom: "1px solid var(--border-primary)" }}>
                 <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{k}</span>
                 <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 700, color: c }}>{v}</span>
@@ -509,17 +596,26 @@ export default function ChatPage() {
           {/* Similarity spectrum */}
           <div style={S.card}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: "var(--text-secondary)", textTransform: "uppercase", marginBottom: 14 }}>Similarity Spectrum</div>
-            {[["Navbar.jsx", "94.2%", "#34d399", 94.2], ["App.jsx", "88.7%", "#22d3ee", 88.7], ["main.jsx", "62.1%", "#818cf8", 62.1]].map(([file, pct, color, width]) => (
-              <div key={file} style={{ marginBottom: 14 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: "var(--text-secondary)" }}>{file}</span>
-                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, fontWeight: 700, color }}>{pct}</span>
-                </div>
-                <div style={{ height: 4, borderRadius: 4, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
-                  <div style={{ height: "100%", borderRadius: 4, background: color, width: `${width}%` }} />
-                </div>
-              </div>
-            ))}
+            {searchResults.length > 0 ? (
+              searchResults.slice(0, 3).map((r, idx) => {
+                const colors = ["#34d399", "#22d3ee", "#818cf8"];
+                const pct = (r.score * 100).toFixed(1);
+                const filename = r.filePath.split("/").pop();
+                return (
+                  <div key={idx} style={{ marginBottom: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: "var(--text-secondary)" }} title={r.filePath}>{filename}</span>
+                      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, fontWeight: 700, color: colors[idx % 3] }}>{pct}%</span>
+                    </div>
+                    <div style={{ height: 4, borderRadius: 4, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                      <div style={{ height: "100%", borderRadius: 4, background: colors[idx % 3], width: `${Math.min(100, Math.max(0, r.score * 100))}%` }} />
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div style={{ fontSize: 11, color: "var(--text-tertiary)", textAlign: "center", padding: "10px 0" }}>No query executed yet</div>
+            )}
           </div>
         </div>
       </aside>

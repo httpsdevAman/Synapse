@@ -1,12 +1,11 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from embeddings.embedder import Embedder
 from retrieval.faiss_store import FAISSStore
 from core.ai import embedder
 
 router = APIRouter()
 # embedder = Embedder()
-faiss_store = FAISSStore()
+
 
 class SearchRequest(BaseModel):
     query: str
@@ -16,6 +15,7 @@ class SearchRequest(BaseModel):
 @router.post("/")
 async def semantic_search(payload: SearchRequest):
     try:
+        faiss_store = FAISSStore()
         # Load vector store
         faiss_store.load(payload.repo_id)
 

@@ -16,7 +16,7 @@ def index_repository(repo_id: str, clone_path: str):
     for file_dict in repository_files:
         language = file_dict["language"]
 
-        chunker = get_chunker("language")
+        chunker = get_chunker(language)
 
         chunks = chunker.chunk(file_dict)
 

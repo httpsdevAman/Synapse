@@ -1,12 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Logo from "../widgets/Logo";
+import { uploadRepository, fetchRepositories } from "../api/repo.api.js";
 
-const MOCK_REPOS = [
-  { id: "facebook-react", name: "facebook/react", chunks: 2418, updated: "2 hours ago" },
-  { id: "vercel-next.js", name: "vercel/next.js", chunks: 3102, updated: "1 day ago" },
-  { id: "tailwindlabs-tailwindcss", name: "tailwindlabs/tailwindcss", chunks: 1847, updated: "3 days ago" },
-];
 
 const INDEXING_STEPS = [
   { label: "Cloning repository...", icon: "ti-git-fork", color: "#818cf8" },
@@ -21,28 +17,88 @@ export default function DashboardPage() {
   const [status, setStatus] = useState("idle"); // idle | indexing | success
   const [currentStep, setCurrentStep] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [repos, setRepos] = useState([]);
+  const [newRepoId, setNewRepoId] = useState(null);
+  const [apiData, setApiData] = useState(null);
 
-  const handleIndexRepo = (e) => {
+  useEffect(() => {
+    const loadRepos = async () => {
+      try {
+        const data = await fetchRepositories();
+        setRepos(data.map(repo => ({
+          id: repo.repo_id,
+          name: repo.repo_name,
+          files: repo.total_files,
+          chunks: repo.total_chunks,
+        })));
+      } catch (error) {
+        console.error("Failed to fetch repositories:", error);
+      }
+    };
+    loadRepos();
+  }, []);
+
+  const handleIndexRepo = async (e) => {
     e.preventDefault();
+
     if (!repoUrl.trim()) return;
-    setStatus("indexing");
-    setCurrentStep(0);
+
+    try {
+      setStatus("indexing");
+      setCurrentStep(0);
+      setApiData(null);
+
+      const res = await uploadRepository(repoUrl);
+      setApiData(res);
+
+    } catch (error) {
+      console.error(error);
+      setStatus("idle");
+    }
   };
 
   useEffect(() => {
     if (status !== "indexing") return;
     const interval = setInterval(() => {
       setCurrentStep((prev) => {
-        if (prev >= INDEXING_STEPS.length - 1) {
-          clearInterval(interval);
-          setTimeout(() => setStatus("success"), 900);
-          return prev;
+        if (prev < INDEXING_STEPS.length - 1) {
+          return prev + 1;
         }
-        return prev + 1;
+        return prev;
       });
     }, 1400);
     return () => clearInterval(interval);
   }, [status]);
+
+  useEffect(() => {
+    if (status === "indexing" && apiData && currentStep === INDEXING_STEPS.length - 1) {
+      const repo_id = apiData.repository.repo_id;
+      const repo_name = apiData.repository.repo_name;
+      const total_files = apiData.indexing.total_files;
+      const total_chunks = apiData.indexing.total_chunks;
+
+      setNewRepoId(repo_id);
+
+      setRepos(prev => {
+        if (prev.some(repo => repo.id === repo_id)) return prev;
+        return [
+          {
+            id: repo_id,
+            name: repo_name,
+            files: total_files,
+            chunks: total_chunks,
+          },
+          ...prev,
+        ];
+      });
+
+      const timer = setTimeout(() => {
+        setStatus("success");
+      }, 900);
+
+      return () => clearTimeout(timer);
+    }
+  }, [status, apiData, currentStep]);
 
   const progressPct = status === "indexing"
     ? Math.max(8, ((currentStep + 1) / INDEXING_STEPS.length) * 100)
@@ -73,7 +129,7 @@ export default function DashboardPage() {
 
 
           {/* Logo */}
-          <Logo/>
+          <Logo />
 
           <div className="flex-col">
             <div style={{ fontSize: 14, fontWeight: 700, background: "var(--brand-name-gradient)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Synapse</div>
@@ -114,7 +170,7 @@ export default function DashboardPage() {
           gap: 10,
           cursor: "pointer",
         }} onClick={() => navigate("/")}>
-          <Logo/>
+          <Logo />
           <div>
             <div style={{
               fontSize: 14, fontWeight: 700, letterSpacing: -0.3,
@@ -168,7 +224,7 @@ export default function DashboardPage() {
               Indexed Repositories
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {MOCK_REPOS.map((repo) => (
+              {repos.map((repo) => (
                 <button
                   key={repo.id}
                   onClick={() => navigate(`/chat/${repo.id}`)}
@@ -196,7 +252,7 @@ export default function DashboardPage() {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{repo.name}</div>
                     <div style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>
-                      {repo.chunks} chunks · {repo.updated}
+                      {repo.files} files • {repo.chunks} chunks
                     </div>
                   </div>
                 </button>
@@ -414,7 +470,7 @@ export default function DashboardPage() {
                 Successfully indexed <strong style={{ WebkitTextFillColor: "var(--text-primary)", color: "var(--text-primary)" }}>{repoUrl.split("/").slice(-2).join("/")}</strong>
               </p>
 
-              <button onClick={() => navigate(`/chat/${repoSlug}`)} style={{
+              <button onClick={() => navigate(`/chat/${newRepoId}`)} style={{
                 padding: "14px 40px", borderRadius: 14,
                 background: "var(--btn-launch-bg)",
                 border: "1px solid var(--btn-launch-border)",
