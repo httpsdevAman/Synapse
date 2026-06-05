@@ -3,7 +3,6 @@ backend/__pycache__/
 backend/.env
 backend/venv/
 backend/venv311/
-backend/vendor/
 backend/build/
 backend/repositories/
 backend/vector_store/
