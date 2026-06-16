@@ -4,7 +4,7 @@ from pathlib import Path
 class Settings(BaseSettings):
     REPOS_DIR: str = "./repositories"
     VECTOR_STORE_DIR: str = "./vector_store"
-    EMBEDDING_MODEL: str = "all-MiniLML6-v2"
+    EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     GROQ_API_KEY: str
     GROQ_MODEL: str ="llama-3.3-70b-versatile"
     ENVIRONMENT: str = "development"
