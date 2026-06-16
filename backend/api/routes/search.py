@@ -12,7 +12,7 @@ class SearchRequest(BaseModel):
     repo_id: str
     top_k: int = 5
 
-@router.post("/")
+@router.post("")
 async def semantic_search(payload: SearchRequest):
     try:
         faiss_store = FAISSStore()
