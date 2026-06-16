@@ -13,7 +13,7 @@ router = APIRouter()
 class RepositoryRequest(BaseModel):
     github_url: str
 
-@router.get("/")
+@router.get("")
 async def list_repositories():
     try:
         return get_all_repositories()
