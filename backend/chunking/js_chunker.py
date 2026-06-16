@@ -7,6 +7,7 @@ from chunking.generic_chunker import GenericChunker
 # Build languages first
 import os
 SO_PATH = "build/my_languages.so"
+os.makedirs(os.path.dirname(SO_PATH), exist_ok=True)
 if not os.path.exists(SO_PATH):
     Language.build_library(
         SO_PATH,
