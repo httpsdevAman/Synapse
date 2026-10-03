@@ -25,6 +25,7 @@ def get_available_models() -> list:
 def generate_response(prompt: str) -> str:
     """Non-streaming — returns full response at once"""
     try:
+        print(get_available_models())
         response = client.chat.completions.create(
             model=settings.GROQ_MODEL,
             messages=[

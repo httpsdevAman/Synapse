@@ -9,3 +9,5 @@ torch
 faiss-cpu
 numpy
 groq
+aiofiles
+

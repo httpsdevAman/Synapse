@@ -10,7 +10,7 @@ class GenerationRequest(BaseModel):
     repo_id: str
     top_k: int = 5
 
-@router.post("/")
+@router.post("")
 async def chat_response(payload: GenerationRequest):
     try:
         response = run_rag_pipeline(payload.repo_id, payload.question, payload.top_k)

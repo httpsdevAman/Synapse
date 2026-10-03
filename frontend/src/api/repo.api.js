@@ -6,12 +6,12 @@ export const uploadRepository = async (github_url) => {
 }
 
 export const fetchRepositories = async () => {
-    const response = await api.get("/repo");
+    const response = await api.get(`/repo?t=${Date.now()}`);
     return response.data;
 }
 
 export const fetchRepositoryById = async (repoId) => {
-    const response = await api.get(`/repo/${repoId}`);
+    const response = await api.get(`/repo/${repoId}?t=${Date.now()}`);
     return response.data;
 }
 

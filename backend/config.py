@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     VECTOR_STORE_DIR: str = "./vector_store"
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     GROQ_API_KEY: str
-    GROQ_MODEL: str ="llama-3.3-70b-versatile"
+    GROQ_MODEL: str ="openai/gpt-oss-120b"
     ENVIRONMENT: str = "development"
 
     class Config:
